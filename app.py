@@ -5,7 +5,7 @@ from collections import defaultdict
 from io import BytesIO
 
 st.set_page_config(page_title="Disponibilità Medici", layout="wide")
-st.title("🩺 Disponibilità Medici - Solo Ultima Risposta + Modifiche")
+st.title("🩺 Disponibilità Medici (Solo Ultima Risposta + Modifiche Effettive)")
 
 uploaded_file = st.file_uploader("📤 Carica il file Excel con le disponibilità dei medici", type=["xlsx"])
 
@@ -26,10 +26,11 @@ if uploaded_file:
     final_disponibilità = defaultdict(set)
 
     grouped = df_raw.groupby(email_col)
+    email_counts = df_raw[email_col].value_counts()
 
-    for email, group in grouped:
-        group_sorted = group.sort_values(time_col)
-        latest = group_sorted.iloc[-1]
+    for email, count in email_counts.items():
+        group = grouped.get_group(email).sort_values(time_col)
+        latest = group.iloc[-1]
         nome = latest[name_col]
 
         # Ultima risposta
@@ -46,10 +47,10 @@ if uploaded_file:
                 ultima_risposta[(giorno, fascia)].add(fascia)
                 final_disponibilità[(giorno, fascia)].add(nome)
 
-        # Confronta con le precedenti se esistono
-        if len(group_sorted) > 1:
+        # Confronta solo se ci sono risposte precedenti
+        if count > 1:
             cumulata_precedente = defaultdict(set)
-            for _, row in group_sorted.iloc[:-1].iterrows():
+            for _, row in group.iloc[:-1].iterrows():
                 for col in availability_cols:
                     giorno = estrai_giorno(col)
                     if giorno is None:
@@ -72,7 +73,6 @@ if uploaded_file:
                 if prima > dopo:
                     rimosse.append(key)
 
-            # Aggiungi al report solo se c'è almeno una modifica
             if aggiunte or rimosse:
                 modifiche_report[email] = {
                     "nome": nome,
@@ -80,7 +80,7 @@ if uploaded_file:
                     "rimosse": rimosse
                 }
 
-    # Costruisci il calendario finale
+    # Costruzione calendario finale
     giorni = sorted(set(day for (day, _) in final_disponibilità.keys()))
     fasce_orarie = sorted(set(fascia for (_, fascia) in final_disponibilità.keys()))
     df_schedule = pd.DataFrame(index=giorni, columns=fasce_orarie)
@@ -88,9 +88,10 @@ if uploaded_file:
     for (giorno, fascia), nomi in final_disponibilità.items():
         df_schedule.at[giorno, fascia] = ', '.join(sorted(nomi))
 
-    st.success("✅ Conversione completata. Solo l'ultima risposta è considerata.")
+    st.success("✅ Conversione completata. Solo l'ultima risposta di ciascun medico è considerata.")
     st.dataframe(df_schedule, use_container_width=True)
 
+    # Download Excel
     buffer = BytesIO()
     df_schedule.to_excel(buffer, index=True, engine='openpyxl')
     buffer.seek(0)
@@ -102,10 +103,10 @@ if uploaded_file:
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     )
 
-    # Mostra solo modifiche effettive
-    st.subheader("📊 Modifiche rispetto alle risposte precedenti")
+    # Report modifiche vere (solo chi ha inviato più risposte e ha cambiato qualcosa)
+    st.subheader("📊 Medici che hanno modificato disponibilità tra una risposta e l'altra")
     if not modifiche_report:
-        st.write("✅ Nessun medico ha inviato modifiche rispetto alle risposte precedenti.")
+        st.write("✅ Nessun medico ha inviato più di una risposta con differenze.")
     else:
         for email, info in modifiche_report.items():
             nome = info["nome"]
