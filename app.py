@@ -44,5 +44,15 @@ if uploaded_file:
     st.dataframe(df_schedule)
 
     # Download del file
-    out_excel = df_schedule.to_excel(index=True, engine='openpyxl')
-    st.download_button("📥 Scarica il file Excel convertito", data=out_excel, file_name="disponibilita_convertita.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+from io import BytesIO
+
+buffer = BytesIO()
+df_schedule.to_excel(buffer, index=True, engine='openpyxl')
+buffer.seek(0)
+
+st.download_button(
+    "📥 Scarica il file Excel convertito",
+    data=buffer,
+    file_name="disponibilita_convertita.xlsx",
+    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+)
