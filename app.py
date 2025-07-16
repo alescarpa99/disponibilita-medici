@@ -15,7 +15,7 @@ def normalizza_nome(nome):
     return cognome
 
 if uploaded_file:
-    # Carica il file Excel
+    # Carica il file
     xls = pd.ExcelFile(uploaded_file)
     df_raw = xls.parse(xls.sheet_names[0])
 
@@ -23,17 +23,17 @@ if uploaded_file:
     availability_cols = [col for col in df_raw.columns if col.startswith("Disponibilità  [")]
     medico_col = "MEDICO: Nome e Cognome"
 
-    # Dizionario per ogni medico normalizzato
-    medici_data = defaultdict(lambda: {
-        "nomi_originali": set(),
-        "disponibilità": defaultdict(set)
-    })
+    # Salva le risposte multiple per medico
+    medici_data = defaultdict(lambda: {"risposte": []})
 
-    # Raccoglie le disponibilità per ciascun medico
     for _, row in df_raw.iterrows():
         nome_originale = row[medico_col]
         nome_norm = normalizza_nome(nome_originale)
-        medici_data[nome_norm]["nomi_originali"].add(nome_originale)
+
+        risposta = {
+            "nome": nome_originale,
+            "disponibilità": defaultdict(set)
+        }
 
         for col in availability_cols:
             match = re.search(r"\[(.+?) (\d{1,2})\]", col)
@@ -45,31 +45,35 @@ if uploaded_file:
                 continue
             fasce = [f.strip() for f in re.split(r',\s*', cella)]
             for fascia in fasce:
-                medici_data[nome_norm]["disponibilità"][(giorno, fascia)].add(nome_originale)
+                risposta["disponibilità"][(giorno, fascia)].add(fascia)
 
-    # Crea il calendario finale
+        medici_data[nome_norm]["risposte"].append(risposta)
+
+    # Costruisci il calendario finale unendo le risposte
     schedule = defaultdict(set)
-    for medico_norm, dati in medici_data.items():
-        for (giorno, fascia), nomi in dati["disponibilità"].items():
-            schedule[(giorno, fascia)].update(nomi)
 
-    # Tutti i giorni e fasce orarie
+    for medico_norm, dati in medici_data.items():
+        tutte_disponibilità = defaultdict(set)
+        for risposta in dati["risposte"]:
+            for (giorno, fascia), fasce in risposta["disponibilità"].items():
+                tutte_disponibilità[(giorno, fascia)].add(risposta["nome"])
+        for key, nomi in tutte_disponibilità.items():
+            schedule[key].update(nomi)
+
     giorni = sorted(set(day for day, _ in schedule.keys()))
     fasce_orarie = sorted(set(fascia for _, fascia in schedule.keys()))
-
     df_schedule = pd.DataFrame(index=giorni, columns=fasce_orarie)
 
     for (giorno, fascia), nomi in schedule.items():
-        # Usa solo il nome più completo per ogni medico normalizzato
         cella_nomi = set()
         for nome in nomi:
             norm = normalizza_nome(nome)
-            migliori_nomi = medici_data[norm]["nomi_originali"]
-            nome_finale = max(migliori_nomi, key=len)  # nome più lungo
+            nomi_possibili = {r["nome"] for r in medici_data[norm]["risposte"]}
+            nome_finale = max(nomi_possibili, key=len)
             cella_nomi.add(nome_finale)
         df_schedule.at[giorno, fascia] = ', '.join(sorted(cella_nomi))
 
-    # Mostra il risultato
+    # Mostra il calendario
     st.success("✅ Conversione completata con successo!")
     st.dataframe(df_schedule, use_container_width=True)
 
@@ -85,11 +89,30 @@ if uploaded_file:
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     )
 
-    # Report duplicati
-    st.subheader("🔁 Medici con nomi duplicati (scritti in modi diversi)")
-    duplicati = {k: v["nomi_originali"] for k, v in medici_data.items() if len(v["nomi_originali"]) > 1}
-    if duplicati:
-        for key, nomi in duplicati.items():
-            st.write(f"🔸 **{key}**: {', '.join(nomi)}")
-    else:
-        st.write("✅ Nessun nome duplicato rilevato.")
+    # Report medici con più risposte
+    st.subheader("📤 Medici che hanno inviato più risposte")
+
+    for norm, data in medici_data.items():
+        risposte = data["risposte"]
+        if len(risposte) <= 1:
+            continue
+
+        st.markdown(f"### 🔁 `{norm.upper()}` ha inviato {len(risposte)} risposte")
+        nomi = {r['nome'] for r in risposte}
+        st.write(f"🧾 Nomi usati: {', '.join(nomi)}")
+
+        # Confronto con la prima risposta
+        prima = risposte[0]["disponibilità"]
+        for i, r in enumerate(risposte[1:], start=2):
+            st.markdown(f"**🆚 Confronto con risposta #{i}:**")
+            differenze = []
+            for key, fasce in r["disponibilità"].items():
+                if key not in prima or fasce != prima[key]:
+                    giorno, fascia = key
+                    differenze.append(f"Giorno {giorno}, fascia {fascia}")
+            if differenze:
+                st.write("🔍 Fasce aggiunte o modificate:")
+                for d in differenze:
+                    st.write(f"• {d}")
+            else:
+                st.write("✅ Nessuna differenza rilevata rispetto alla prima risposta.")
