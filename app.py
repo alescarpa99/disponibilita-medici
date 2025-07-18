@@ -69,3 +69,17 @@ if uploaded_file:
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     )
 
+# Report: conteggio disponibilità per medico
+conteggio_medici = defaultdict(int)
+for (giorno, fascia), nomi in final_disponibilità.items():
+    for nome in nomi:
+        conteggio_medici[nome] += 1
+
+df_report = pd.DataFrame.from_dict(conteggio_medici, orient='index', columns=["Numero disponibilità"])
+df_report.index.name = "Medico"
+df_report = df_report.sort_values("Numero disponibilità", ascending=False)
+
+st.markdown("### 📊 Report: Disponibilità Totali per Medico")
+st.dataframe(df_report, use_container_width=True)
+
+
