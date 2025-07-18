@@ -5,12 +5,12 @@ from collections import defaultdict
 from io import BytesIO
 
 st.set_page_config(page_title="Disponibilità Medici", layout="wide")
-st.title("🩺 Disponibilità Medici - Prima Risposta Registrata")
+st.title("🩺 Disponibilità Medici - Ultima Risposta Registrata")
 
 st.markdown("""
 ✅ **Nota bene:**  
-Questa applicazione considera **solo la prima risposta** inviata da ciascun medico (identificato tramite email).  
-Se un medico ha inviato più risposte, **le successive vengono ignorate**.
+Questa applicazione considera **solo l'ultima risposta** inviata da ciascun medico (identificato tramite email).  
+Se un medico ha inviato più risposte, **le precedenti vengono ignorate**.
 """)
 
 uploaded_file = st.file_uploader("📤 Carica il file Excel con le disponibilità dei medici", type=["xlsx"])
@@ -28,12 +28,12 @@ if uploaded_file:
     time_col = "Informazioni cronologiche"
     availability_cols = [col for col in df_raw.columns if col.startswith("Disponibilità")]
 
-    # Tieni solo la prima risposta per ogni email
-    first_responses = df_raw.sort_values(time_col).drop_duplicates(subset=[email_col], keep="first")
+    # Tieni solo l'ultima risposta per ogni email
+    last_responses = df_raw.sort_values(time_col).drop_duplicates(subset=[email_col], keep="last")
 
     final_disponibilità = defaultdict(set)
 
-    for _, row in first_responses.iterrows():
+    for _, row in last_responses.iterrows():
         nome = row[name_col]
         for col in availability_cols:
             giorno = estrai_giorno(col)
@@ -54,7 +54,7 @@ if uploaded_file:
     for (giorno, fascia), nomi in final_disponibilità.items():
         df_schedule.at[giorno, fascia] = ', '.join(sorted(nomi))
 
-    st.success("✅ Conversione completata. È stata usata solo la prima risposta di ogni medico.")
+    st.success("✅ Conversione completata. È stata usata solo l'ultima risposta di ogni medico.")
     st.dataframe(df_schedule, use_container_width=True)
 
     # Download Excel
