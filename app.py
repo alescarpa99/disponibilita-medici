@@ -5,7 +5,7 @@ from collections import defaultdict
 from io import BytesIO
 
 st.set_page_config(page_title="Disponibilità Medici", layout="wide")
-st.title("🩺 Disponibilità Medici - Ultima Risposta Registrata")
+st.title("🩺 Disponibilità Medici DEA")
 
 st.markdown("""
 ✅ **Nota bene:**  
