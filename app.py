@@ -24,7 +24,7 @@ if uploaded_file:
     df_raw = xls.parse(xls.sheet_names[0])
 
     email_col = "Indirizzo email"
-    name_col = "MEDICO: Nome e Cognome"
+    name_col = "MEDICO: Cognome"
     time_col = "Informazioni cronologiche"
     availability_cols = [col for col in df_raw.columns if col.startswith("Disponibilità")]
 
