@@ -71,14 +71,17 @@ if uploaded_file:
 
 # Report: conteggio disponibilità per medico
 conteggio_medici = defaultdict(int)
+
+# Ogni (giorno, fascia) contiene uno o più medici
 for (giorno, fascia), nomi in final_disponibilità.items():
     for nome in nomi:
-        conteggio_medici[nome] += 1
+        conteggio_medici[nome] += 1  # Conta ogni fascia oraria in cui è disponibile
 
-df_report = pd.DataFrame.from_dict(conteggio_medici, orient='index', columns=["Numero disponibilità"])
-df_report.index.name = "Medico"
-df_report = df_report.sort_values("Numero disponibilità", ascending=False)
+# Converti in DataFrame
+df_report = pd.DataFrame(list(conteggio_medici.items()), columns=["Medico", "Numero disponibilità"])
+df_report = df_report.sort_values("Numero disponibilità", ascending=False).reset_index(drop=True)
 
+# Mostra in Streamlit
 st.markdown("### 📊 Report: Disponibilità Totali per Medico")
 st.dataframe(df_report, use_container_width=True)
 
