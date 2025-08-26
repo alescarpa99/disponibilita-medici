@@ -37,7 +37,7 @@ if uploaded_file:
     final_disponibilita = defaultdict(set)
 
     for _, row in last_responses.iterrows():
-        cognome = str(row[cognome_col]).strip()  # <-- solo cognome
+        cognome = str(row[cognome_col]).strip().upper()  # <-- solo cognome MAIUSCOLO
         for col in availability_cols:
             giorno = estrai_giorno(col)
             if giorno is None:
@@ -61,7 +61,7 @@ if uploaded_file:
     for (giorno, fascia), cognomi in final_disponibilita.items():
         df_schedule.at[giorno, fascia] = ', '.join(sorted(cognomi))
 
-    st.success("✅ Conversione completata. È stata usata solo l'ultima risposta di ogni medico (solo cognome).")
+    st.success("✅ Conversione completata. È stata usata solo l'ultima risposta di ogni medico (solo cognome, in MAIUSCOLO).")
     st.dataframe(df_schedule, use_container_width=True)
 
     # Download calendario disponibilità
@@ -97,5 +97,4 @@ if uploaded_file:
         file_name="report_medici.xlsx",
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     )
-
 
