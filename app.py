@@ -23,45 +23,53 @@ if uploaded_file:
     xls = pd.ExcelFile(uploaded_file)
     df_raw = xls.parse(xls.sheet_names[0])
 
-    # Normalizza colonne
+    # Normalizza header
     df_raw.columns = df_raw.columns.str.strip()
 
-    email_col = "Indirizzo email"
+    email_col   = "Indirizzo email"
     cognome_col = "MEDICO: Cognome"
-    time_col = "Informazioni cronologiche"
-    availability_cols = [col for col in df_raw.columns if col.startswith("Disponibilità")]
+    time_col    = "Informazioni cronologiche"
+    availability_cols = [c for c in df_raw.columns if c.startswith("Disponibilità")]
 
-    # Tieni solo l'ultima risposta per ogni email
+    # Ultima risposta per email
     last_responses = df_raw.sort_values(time_col).drop_duplicates(subset=[email_col], keep="last")
 
+    # Salvo i cognomi nello stato "originale" (non maiuscolo)
     final_disponibilita = defaultdict(set)
 
     for _, row in last_responses.iterrows():
-        cognome = str(row[cognome_col]).strip().upper()  # <-- solo cognome MAIUSCOLO
+        cognome_raw = str(row.get(cognome_col, "")).strip()
+        if not cognome_raw:
+            continue
+
         for col in availability_cols:
             giorno = estrai_giorno(col)
             if giorno is None:
                 continue
+
             cella = row[col]
             if pd.isna(cella):
                 continue
-            fasce = re.split(r"[;,]\s*", str(cella))
+
+            fasce = re.split(r"[;,]\s*", str(cella).strip())
             for fascia in fasce:
                 if fascia:
-                    final_disponibilita[(giorno, fascia)].add(cognome)
+                    final_disponibilita[(giorno, fascia)].add(cognome_raw)
 
     # Costruzione calendario
-    giorni = sorted(set(day for (day, _) in final_disponibilita.keys()))
-    # Ordine fasce predefinito
-    ordine_fasce = ["Mattina", "Pomeriggio", "Notte"]
-    fasce_orarie = [f for f in ordine_fasce if f in {fascia for (_, fascia) in final_disponibilita.keys()}]
+    giorni = sorted({day for (day, _) in final_disponibilita.keys()})
+    fasce_presenti = {fascia for (_, fascia) in final_disponibilita.keys()}
+    ordine_fasce   = ["Mattina", "Pomeriggio", "Notte"]
+    fasce_orarie   = [f for f in ordine_fasce if f in fasce_presenti] + sorted(f for f in fasce_presenti if f not in ordine_fasce)
 
     df_schedule = pd.DataFrame(index=giorni, columns=fasce_orarie)
 
-    for (giorno, fascia), cognomi in final_disponibilita.items():
-        df_schedule.at[giorno, fascia] = ', '.join(sorted(cognomi))
+    for (giorno, fascia), cognomi_raw in final_disponibilita.items():
+        # 🔠 UPPER SOLO QUI (output)
+        cognomi_upper = sorted({str(n).strip().upper() for n in cognomi_raw if str(n).strip()})
+        df_schedule.at[giorno, fascia] = ", ".join(cognomi_upper)
 
-    st.success("✅ Conversione completata. È stata usata solo l'ultima risposta di ogni medico (solo cognome, in MAIUSCOLO).")
+    st.success("✅ Conversione completata. È stata usata solo l'ultima risposta di ogni medico. (Cognomi resi MAIUSCOLI solo in output)")
     st.dataframe(df_schedule, use_container_width=True)
 
     # Download calendario disponibilità
@@ -76,10 +84,13 @@ if uploaded_file:
     )
 
     # Report: conteggio disponibilità per medico
+    # Aggrego per COGNOME MAIUSCOLO per unificare Rossi/ROSSI/rossi
     conteggio_medici = defaultdict(int)
-    for (giorno, fascia), cognomi in final_disponibilita.items():
-        for cognome in cognomi:
-            conteggio_medici[cognome] += 1
+    for (giorno, fascia), cognomi_raw in final_disponibilita.items():
+        for cognome in cognomi_raw:
+            key = str(cognome).strip().upper()
+            if key:
+                conteggio_medici[key] += 1
 
     df_report = pd.DataFrame(list(conteggio_medici.items()), columns=["Medico (Cognome)", "Numero disponibilità"])
     df_report = df_report.sort_values("Numero disponibilità", ascending=False).reset_index(drop=True)
@@ -97,4 +108,3 @@ if uploaded_file:
         file_name="report_medici.xlsx",
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     )
-
